@@ -22,5 +22,6 @@ urlpatterns = [
     path('settings/', views.system_settings, name='system_settings'),
     path('interviews/', views.interview_list, name='interview_list'),
     path('interviews/schedule/<int:application_id>/', views.interview_create, name='interview_create'),
-    path('review/<int:pk>/', views.review_application, name='review_application'),
+    # API review endpoint (used by mobile / React Native)
+    path('review/<int:pk>/', views.api_review_application, name='review_application'),
 ]

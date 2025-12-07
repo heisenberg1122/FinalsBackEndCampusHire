@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import JobPosting, JobApplication
 from registration.models import UserRegistration
@@ -185,8 +186,9 @@ def interview_create(request, application_id):
 
 # --- REVIEW APPLICATION VIEW (API) ---
 
+@csrf_exempt
 @api_view(['POST'])
-def review_application(request, pk):
+def api_review_application(request, pk):
     """
     API Version of your review logic.
     Expects JSON: { "action": "accept" } or { "action": "reject" }
@@ -260,7 +262,13 @@ def application_list(request):
     return render(request, 'dashboard/applications.html')
 
 def pending_tasks(request):
-    return render(request, 'dashboard/tasks.html')
+    # Ensure admin / HR is logged in (uses same session system as other HTML views)
+    if not request.session.get('user_id'):
+        return redirect('registration:login_view')
+
+    # Provide list of pending job applications to the template
+    tasks = JobApplication.objects.filter(status='Pending').order_by('-applied_at')
+    return render(request, 'dashboard/tasks.html', {'tasks': tasks})
 
 def system_settings(request):
     return render(request, 'dashboard/settings.html')
