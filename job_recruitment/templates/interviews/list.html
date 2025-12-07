@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Interviews</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; border: 1px solid #ddd; }
+    th { background: #f6f6f6; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Interview List</h1>
+    <p>This page is a simple placeholder for the interviews list. Use the admin or API to manage interviews.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Applicant</th>
+          <th>Position</th>
+          <th>Date / Time</th>
+          <th>Location</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for interview in interviews %}
+        <tr>
+          <td>{{ interview.application.applicant.first_name }} {{ interview.application.applicant.last_name }}</td>
+          <td>{{ interview.application.job.title }}</td>
+          <td>{{ interview.date_time }}</td>
+          <td>{{ interview.location }}</td>
+          <td>{{ interview.status }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5">No interviews scheduled.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

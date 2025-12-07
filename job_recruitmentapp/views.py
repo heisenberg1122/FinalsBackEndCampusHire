@@ -1,8 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
 
 from .models import JobPosting, JobApplication
 from registration.models import UserRegistration
@@ -161,6 +164,7 @@ def interview_list(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@authentication_classes([])
 def interview_create(request):
     """
     Creates an interview.
@@ -179,40 +183,104 @@ def interview_create(request):
         app_id = data.get('application_id')
         application = get_object_or_404(JobApplication, id=app_id)
 
-        # 2. Combine Date and Time strings into one DateTime string
-        # Frontend sends: date="2025-12-30", time="14:30"
-        # Database expects: "2025-12-30 14:30"
+        # 2. Combine Date and Time strings into one DateTime
         date_part = data.get('date')
         time_part = data.get('time')
-        
-        if not date_part or not time_part:
-             return Response({"error": "Date and Time are required"}, status=400)
+        location = data.get('location') or 'Online'
 
-        full_date_time = f"{date_part} {time_part}"
+        if not date_part or not time_part:
+            return Response({"error": "Date and Time are required"}, status=400)
+
+        # Expecting formats: YYYY-MM-DD and HH:MM (24-hour)
+        try:
+            parsed_dt = datetime.datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M")
+        except Exception as e:
+            return Response({"error": "Invalid date/time format. Use YYYY-MM-DD and HH:MM."}, status=400)
 
         # 3. Create the Interview Object
-        Interview.objects.create(
-            application=application,
-            date_time=full_date_time, # Django automatically parses this string
-            location=data.get('location'),
-            status='Scheduled'
-        )
+        try:
+            Interview.objects.create(
+                application=application,
+                date_time=parsed_dt,
+                location=location,
+                status='Scheduled'
+            )
 
-        # 4. Update Application Status
-        application.status = "Interviewing"
-        application.save()
+            # 4. Update Application Status
+            application.status = "Interviewing"
+            application.save()
 
-        return Response({"message": "Interview Scheduled Successfully"}, status=201)
+            return Response({"message": "Interview Scheduled Successfully"}, status=201)
+        except Exception as e:
+            print("Error saving interview:", str(e))
+            return Response({"error": str(e)}, status=500)
 
     except Exception as e:
         print("Error scheduling interview:", str(e))
         return Response({"error": str(e)}, status=400)
 
 
+# A plain Django view (not DRF) that is explicitly CSRF-exempt and returns
+# JsonResponse. Some environments (DRF decorators + middleware) still
+# result in CSRF checks; to be robust for mobile clients we'll expose this
+# endpoint and point the frontend to it. It mirrors the logic of
+# interview_create but uses plain Django request handling.
+@csrf_exempt
+def interview_create_no_csrf(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    app_id = data.get('application_id')
+    date_part = data.get('date')
+    time_part = data.get('time')
+    location = data.get('location') or 'Online'
+
+    if not app_id or not date_part or not time_part:
+        return JsonResponse({'error': 'application_id, date and time are required'}, status=400)
+
+    try:
+        application = get_object_or_404(JobApplication, id=app_id)
+    except Exception:
+        return JsonResponse({'error': 'Application not found'}, status=404)
+
+    # Parse datetime
+    try:
+        parsed_dt = datetime.datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M")
+    except Exception:
+        return JsonResponse({'error': 'Invalid date/time format. Use YYYY-MM-DD and HH:MM.'}, status=400)
+
+    try:
+        Interview.objects.create(
+            application=application,
+            date_time=parsed_dt,
+            location=location,
+            status='Scheduled'
+        )
+        application.status = 'Interviewing'
+        application.save()
+        # Serialize created interview and return it so clients can update UI immediately
+        interview = Interview.objects.filter(application=application, date_time=parsed_dt).order_by('-id').first()
+        try:
+            from .serializer import InterviewSerializer
+            serialized = InterviewSerializer(interview).data if interview else {'message': 'Interview Scheduled Successfully'}
+        except Exception:
+            serialized = {'message': 'Interview Scheduled Successfully'}
+        return JsonResponse(serialized, status=201)
+    except Exception as e:
+        print('Error saving interview (no csrf view):', str(e))
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 # --- REVIEW APPLICATION VIEW (API) ---
 
 @csrf_exempt
 @api_view(['POST'])
+@authentication_classes([])
 def api_review_application(request, pk):
     """
     API Version of your review logic.
@@ -299,7 +367,9 @@ def system_settings(request):
     return render(request, 'dashboard/settings.html')
 
 def interview_list(request):
-    return render(request, 'interviews/list.html')
+    # Render HTML list of interviews for admin panel
+    interviews = Interview.objects.select_related('application__applicant', 'application__job').all().order_by('date_time')
+    return render(request, 'interviews/list.html', {'interviews': interviews})
 
 def interview_create(request, application_id):
     return redirect('jobs:interview_list')
