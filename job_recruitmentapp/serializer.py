@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Interview, JobPosting, JobApplication, Interview
+from .models import Interview, JobPosting, JobApplication, Interview, Notification
 from registration.models import UserRegistration
 # Fix import to use registration.serializers
 from registration.serializer import UserSerializer 
@@ -31,3 +31,8 @@ class InterviewSerializer(serializers.ModelSerializer):
         if obj.application and obj.application.applicant:
             return f"{obj.application.applicant.first_name} {obj.application.applicant.last_name}"
         return "Unknown Applicant"
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'message', 'is_read', 'created_at']

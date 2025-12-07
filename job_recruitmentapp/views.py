@@ -13,6 +13,8 @@ from .serializer import JobPostingSerializer, JobApplicationSerializer
 from registration.serializer import UserSerializer
 from .models import Interview
 from .serializer import InterviewSerializer
+from .models import Notification
+from .serializer import NotificationSerializer
 import datetime
 
 # ==========================================
@@ -148,42 +150,42 @@ def api_update_application_status(request, pk):
         return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
     
 
+
+# --- HELPER FUNCTION ---
+def send_notification(user, title, message):
+    try:
+        Notification.objects.create(recipient=user, title=title, message=message)
+    except Exception as e:
+        print(f"Failed to send notification: {e}")
+
+# --- NOTIFICATION API (GET) ---
+@api_view(['GET'])
+def api_user_notifications(request, user_id):
+    notifications = Notification.objects.filter(recipient_id=user_id).order_by('-created_at')
+    serializer = NotificationSerializer(notifications, many=True)
+    return Response(serializer.data)
+
 # --- INTERVIEW LOGIC (API) ---
 
 @api_view(['GET'])
 def api_interview_list(request):
     try:
-        # LOGIC: Filter Scheduled interviews
         interviews = Interview.objects.filter(status='Scheduled').order_by('date_time')
-        
-        # API CHANGE: Serialize data to JSON instead of rendering HTML
         serializer = InterviewSerializer(interviews, many=True)
         return Response(serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
+# --- 1. DRF VERSION (Keep this if using DRF) ---
 @csrf_exempt
 @api_view(['POST'])
 @authentication_classes([])
 def interview_create(request):
-    """
-    Creates an interview.
-    Expects JSON body: 
-    { 
-        "application_id": 1,
-        "date": "2025-12-30", 
-        "time": "14:30", 
-        "location": "Zoom" 
-    }
-    """
     try:
         data = request.data
-        
-        # 1. Get the Application
         app_id = data.get('application_id')
         application = get_object_or_404(JobApplication, id=app_id)
 
-        # 2. Combine Date and Time strings into one DateTime
         date_part = data.get('date')
         time_part = data.get('time')
         location = data.get('location') or 'Online'
@@ -191,40 +193,34 @@ def interview_create(request):
         if not date_part or not time_part:
             return Response({"error": "Date and Time are required"}, status=400)
 
-        # Expecting formats: YYYY-MM-DD and HH:MM (24-hour)
-        try:
-            parsed_dt = datetime.datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M")
-        except Exception as e:
-            return Response({"error": "Invalid date/time format. Use YYYY-MM-DD and HH:MM."}, status=400)
+        parsed_dt = datetime.datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M")
 
-        # 3. Create the Interview Object
-        try:
-            Interview.objects.create(
-                application=application,
-                date_time=parsed_dt,
-                location=location,
-                status='Scheduled'
-            )
+        Interview.objects.create(
+            application=application,
+            date_time=parsed_dt,
+            location=location,
+            status='Scheduled'
+        )
 
-            # 4. Update Application Status
-            application.status = "Interviewing"
-            application.save()
+        application.status = "Interviewing"
+        application.save()
 
-            return Response({"message": "Interview Scheduled Successfully"}, status=201)
-        except Exception as e:
-            print("Error saving interview:", str(e))
-            return Response({"error": str(e)}, status=500)
+        # 🔥 NOTIFICATION 🔥
+        send_notification(
+            user=application.applicant,
+            title="Interview Scheduled",
+            message=f"Interview for {application.job.title} scheduled: {parsed_dt.strftime('%b %d, %H:%M')}."
+        )
+
+        return Response({"message": "Interview Scheduled Successfully"}, status=201)
 
     except Exception as e:
         print("Error scheduling interview:", str(e))
         return Response({"error": str(e)}, status=400)
 
 
-# A plain Django view (not DRF) that is explicitly CSRF-exempt and returns
-# JsonResponse. Some environments (DRF decorators + middleware) still
-# result in CSRF checks; to be robust for mobile clients we'll expose this
-# endpoint and point the frontend to it. It mirrors the logic of
-# interview_create but uses plain Django request handling.
+# --- 2. PLAIN DJANGO VERSION (The one you asked to add) ---
+# This serves as a robust fallback if DRF serialization fails or middleware interferes.
 @csrf_exempt
 def interview_create_no_csrf(request):
     if request.method != 'POST':
@@ -255,22 +251,35 @@ def interview_create_no_csrf(request):
         return JsonResponse({'error': 'Invalid date/time format. Use YYYY-MM-DD and HH:MM.'}, status=400)
 
     try:
+        # Create Interview
         Interview.objects.create(
             application=application,
             date_time=parsed_dt,
             location=location,
             status='Scheduled'
         )
+        
+        # Update Application Status
         application.status = 'Interviewing'
         application.save()
-        # Serialize created interview and return it so clients can update UI immediately
+
+        # 🔥 TRIGGER NOTIFICATION (Added here) 🔥
+        send_notification(
+            user=application.applicant,
+            title="Interview Scheduled",
+            message=f"Good news! An interview for {application.job.title} has been scheduled on {parsed_dt.strftime('%b %d, %I:%M %p')} at {location}."
+        )
+
+        # Serialize created interview
         interview = Interview.objects.filter(application=application, date_time=parsed_dt).order_by('-id').first()
         try:
             from .serializer import InterviewSerializer
             serialized = InterviewSerializer(interview).data if interview else {'message': 'Interview Scheduled Successfully'}
         except Exception:
             serialized = {'message': 'Interview Scheduled Successfully'}
-        return JsonResponse(serialized, status=201)
+        
+        return JsonResponse(serialized, status=201, safe=False)
+
     except Exception as e:
         print('Error saving interview (no csrf view):', str(e))
         return JsonResponse({'error': str(e)}, status=500)
@@ -282,23 +291,21 @@ def interview_create_no_csrf(request):
 @api_view(['POST'])
 @authentication_classes([])
 def api_review_application(request, pk):
-    """
-    API Version of your review logic.
-    Expects JSON: { "action": "accept" } or { "action": "reject" }
-    """
     application = get_object_or_404(JobApplication, pk=pk)
-
-    # API CHANGE: Get 'action' from JSON body
     action = request.data.get('action')
     
     if action == 'accept':
         application.status = 'Accepted'
         application.save()
+        # 🔥 NOTIFICATION 🔥
+        send_notification(application.applicant, "Application Accepted", f"Congratulations! You've been accepted for {application.job.title}.")
         return Response({"message": "Application Accepted.", "status": "Accepted"})
     
     elif action == 'reject':
         application.status = 'Rejected'
         application.save()
+        # 🔥 NOTIFICATION 🔥
+        send_notification(application.applicant, "Application Update", f"Update regarding {application.job.title}: We have decided not to proceed.")
         return Response({"message": "Application Rejected.", "status": "Rejected"})
     
     return Response({"error": "Invalid action provided"}, status=400)

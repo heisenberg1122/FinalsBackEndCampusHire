@@ -14,7 +14,8 @@ urlpatterns = [
     path('api/interviews/', views.api_interview_list, name='api_interviews'),
     # Use a CSRF-exempt plain Django view for mobile POSTs to avoid DRF/CSRF conflicts
     path('api/interviews/create/', views.interview_create_no_csrf, name='interview_create'),
-
+# --- Notifications (NEW) ---
+    path('api/notifications/<int:user_id>/', views.api_user_notifications, name='api_user_notifications'),
     # Desktop HTML Routes
     path('list/', views.jobs_html, name='jobs_html'),
     path('add/', views.job_create_html, name='job_create_html'),
