@@ -10,6 +10,7 @@ from .serializer import JobPostingSerializer, JobApplicationSerializer
 from registration.serializer import UserSerializer
 from .models import Interview
 from .serializer import InterviewSerializer
+import datetime
 
 # ==========================================
 #  API VIEWS (Mobile / React Native)
@@ -158,29 +159,53 @@ def interview_list(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
+@csrf_exempt
 @api_view(['POST'])
-def interview_create(request, application_id):
-    # LOGIC: Get the application
-    application = get_object_or_404(JobApplication, id=application_id)
-    
-    # LOGIC: Create Interview from Data
-    # API CHANGE: Use 'request.data' (JSON) instead of 'request.POST' (Form)
+def interview_create(request):
+    """
+    Creates an interview.
+    Expects JSON body: 
+    { 
+        "application_id": 1,
+        "date": "2025-12-30", 
+        "time": "14:30", 
+        "location": "Zoom" 
+    }
+    """
     try:
+        data = request.data
+        
+        # 1. Get the Application
+        app_id = data.get('application_id')
+        application = get_object_or_404(JobApplication, id=app_id)
+
+        # 2. Combine Date and Time strings into one DateTime string
+        # Frontend sends: date="2025-12-30", time="14:30"
+        # Database expects: "2025-12-30 14:30"
+        date_part = data.get('date')
+        time_part = data.get('time')
+        
+        if not date_part or not time_part:
+             return Response({"error": "Date and Time are required"}, status=400)
+
+        full_date_time = f"{date_part} {time_part}"
+
+        # 3. Create the Interview Object
         Interview.objects.create(
             application=application,
-            date_time=request.data.get('date_time'),
-            location=request.data.get('location'),
-            notes=request.data.get('notes'),
-            status='Scheduled' # Ensure defaults are set
+            date_time=full_date_time, # Django automatically parses this string
+            location=data.get('location'),
+            status='Scheduled'
         )
-        
-        # LOGIC: Update Application Status
-        application.status = "Interview Scheduled"
+
+        # 4. Update Application Status
+        application.status = "Interviewing"
         application.save()
-        
-        return Response({"message": f"Interview scheduled for {application.applicant.first_name}."}, status=201)
-    
+
+        return Response({"message": "Interview Scheduled Successfully"}, status=201)
+
     except Exception as e:
+        print("Error scheduling interview:", str(e))
         return Response({"error": str(e)}, status=400)
 
 
