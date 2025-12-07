@@ -151,7 +151,7 @@ def api_update_application_status(request, pk):
 # --- INTERVIEW LOGIC (API) ---
 
 @api_view(['GET'])
-def interview_list(request):
+def api_interview_list(request):
     try:
         # LOGIC: Filter Scheduled interviews
         interviews = Interview.objects.filter(status='Scheduled').order_by('date_time')

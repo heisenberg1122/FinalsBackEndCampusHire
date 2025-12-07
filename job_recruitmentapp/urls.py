@@ -11,7 +11,7 @@ urlpatterns = [
     path('api/apply/', views.api_apply_job, name='api_apply_job'),
     # In urlpatterns:
     path('api/applications/<int:pk>/status/', views.api_update_application_status),
-    path('api/interviews/', views.interview_list, name='api_interviews'),
+    path('api/interviews/', views.api_interview_list, name='api_interviews'),
     # Use a CSRF-exempt plain Django view for mobile POSTs to avoid DRF/CSRF conflicts
     path('api/interviews/create/', views.interview_create_no_csrf, name='interview_create'),
 
