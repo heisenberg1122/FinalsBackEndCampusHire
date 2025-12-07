@@ -7,6 +7,8 @@ from .models import JobPosting, JobApplication
 from registration.models import UserRegistration
 from .serializer import JobPostingSerializer, JobApplicationSerializer
 from registration.serializer import UserSerializer
+from .models import Interview
+from .serializer import InterviewSerializer
 
 # ==========================================
 #  API VIEWS (Mobile / React Native)
@@ -84,7 +86,128 @@ def api_applications(request):
     serializer = JobApplicationSerializer(apps, many=True)
     return Response(serializer.data)
 
+# --- 6. APPLY FOR JOB API ---
+# views.py
 
+@api_view(['POST'])
+def api_apply_job(request):
+    try:
+        job_id = request.data.get('job_id')
+        user_id = request.data.get('user_id')
+
+        # 1. Validate Data Exists
+        if not job_id or not user_id:
+            return Response({"error": "Missing Job ID or User ID"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Get Instances
+        job = JobPosting.objects.get(pk=job_id)
+        user = UserRegistration.objects.get(pk=user_id)
+
+        # 3. Check for Duplicate
+        if JobApplication.objects.filter(job=job, applicant=user).exists():
+            # This is the 400 error you were seeing (which is good!)
+            return Response({"error": "You have already applied for this job"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Create Application
+        JobApplication.objects.create(
+            job=job,
+            applicant=user,
+            status='Pending'
+        )
+        return Response({"message": "Application submitted successfully"}, status=status.HTTP_201_CREATED)
+
+    except JobPosting.DoesNotExist:
+        return Response({"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
+    except UserRegistration.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error in api_apply_job: {str(e)}") # Print error to terminal for debugging
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+# --- 7. UPDATE APPLICATION STATUS API ---
+@api_view(['PUT'])
+def api_update_application_status(request, pk):
+    try:
+        application = JobApplication.objects.get(pk=pk)
+        new_status = request.data.get('status')
+        
+        if new_status not in ['Accepted', 'Rejected', 'Scheduled', 'Pending']:
+             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+
+        application.status = new_status
+        application.save()
+        return Response({"message": f"Application marked as {new_status}"}, status=status.HTTP_200_OK)
+
+    except JobApplication.DoesNotExist:
+        return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+
+# --- INTERVIEW LOGIC (API) ---
+
+@api_view(['GET'])
+def interview_list(request):
+    try:
+        # LOGIC: Filter Scheduled interviews
+        interviews = Interview.objects.filter(status='Scheduled').order_by('date_time')
+        
+        # API CHANGE: Serialize data to JSON instead of rendering HTML
+        serializer = InterviewSerializer(interviews, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['POST'])
+def interview_create(request, application_id):
+    # LOGIC: Get the application
+    application = get_object_or_404(JobApplication, id=application_id)
+    
+    # LOGIC: Create Interview from Data
+    # API CHANGE: Use 'request.data' (JSON) instead of 'request.POST' (Form)
+    try:
+        Interview.objects.create(
+            application=application,
+            date_time=request.data.get('date_time'),
+            location=request.data.get('location'),
+            notes=request.data.get('notes'),
+            status='Scheduled' # Ensure defaults are set
+        )
+        
+        # LOGIC: Update Application Status
+        application.status = "Interview Scheduled"
+        application.save()
+        
+        return Response({"message": f"Interview scheduled for {application.applicant.first_name}."}, status=201)
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+
+# --- REVIEW APPLICATION VIEW (API) ---
+
+@api_view(['POST'])
+def review_application(request, pk):
+    """
+    API Version of your review logic.
+    Expects JSON: { "action": "accept" } or { "action": "reject" }
+    """
+    application = get_object_or_404(JobApplication, pk=pk)
+
+    # API CHANGE: Get 'action' from JSON body
+    action = request.data.get('action')
+    
+    if action == 'accept':
+        application.status = 'Accepted'
+        application.save()
+        return Response({"message": "Application Accepted.", "status": "Accepted"})
+    
+    elif action == 'reject':
+        application.status = 'Rejected'
+        application.save()
+        return Response({"message": "Application Rejected.", "status": "Rejected"})
+    
+    return Response({"error": "Invalid action provided"}, status=400)
+   
 # ==========================================
 #  HTML VIEWS (Desktop / Admin Panel)
 # ==========================================
