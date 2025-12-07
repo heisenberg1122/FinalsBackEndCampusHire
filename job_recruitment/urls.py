@@ -10,7 +10,7 @@ urlpatterns = [
     path('api/login/', app_views.api_login),
     path('api/stats/', app_views.api_dashboard_stats),
     path('api/jobs/', app_views.api_jobs),
-
+    path('api/jobs/<int:pk>/', app_views.api_job_detail), # <--- NEW for Edit/Delete 
     # APP CONNECTIONS (Note the prefixes!)
     path('reg/', include('registration.urls')), 
     path('job/', include('job_recruitmentapp.urls')),
