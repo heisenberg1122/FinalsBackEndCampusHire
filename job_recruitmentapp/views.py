@@ -15,6 +15,7 @@ from .models import Interview
 from .serializer import InterviewSerializer
 from .models import Notification
 from .serializer import NotificationSerializer
+from django.db import OperationalError
 import datetime
 
 # ==========================================
@@ -144,6 +145,17 @@ def api_update_application_status(request, pk):
 
         application.status = new_status
         application.save()
+        # Send a user notification for important status changes
+        try:
+            if new_status == 'Accepted':
+                send_notification(application.applicant, "Application Accepted", f"Congratulations! You've been accepted for {application.job.title}.")
+            elif new_status == 'Rejected':
+                send_notification(application.applicant, "Application Update", f"Update regarding {application.job.title}: We have decided not to proceed.")
+            elif new_status == 'Scheduled':
+                # Scheduled status may be set when an interview is created elsewhere
+                send_notification(application.applicant, "Interview Scheduled", f"An interview for {application.job.title} has been scheduled. Check your dashboard for details.")
+        except Exception as e:
+            print(f"Failed to send notification on status change: {e}")
         return Response({"message": f"Application marked as {new_status}"}, status=status.HTTP_200_OK)
 
     except JobApplication.DoesNotExist:
@@ -154,16 +166,90 @@ def api_update_application_status(request, pk):
 # --- HELPER FUNCTION ---
 def send_notification(user, title, message):
     try:
-        Notification.objects.create(recipient=user, title=title, message=message)
+        # Allow passing either a user instance or a user id
+        if isinstance(user, int):
+            user_obj = UserRegistration.objects.get(pk=user)
+        else:
+            user_obj = user
+
+        notif = Notification.objects.create(recipient=user_obj, title=title, message=message, is_read=False)
+        print(f"Notification created (id={notif.id}) for user_id={user_obj.id}: {title}")
+        return notif
     except Exception as e:
         print(f"Failed to send notification: {e}")
+        return None
 
 # --- NOTIFICATION API (GET) ---
 @api_view(['GET'])
 def api_user_notifications(request, user_id):
-    notifications = Notification.objects.filter(recipient_id=user_id).order_by('-created_at')
-    serializer = NotificationSerializer(notifications, many=True)
-    return Response(serializer.data)
+    try:
+        notifications = Notification.objects.filter(recipient_id=user_id).order_by('-created_at')
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+    except OperationalError as oe:
+        # Database table for notifications likely doesn't exist yet (migrations not applied).
+        print(f"OperationalError when fetching notifications: {oe}")
+        # Return empty list so client receives a 200 with no notifications instead of a 500.
+        return Response([], status=200)
+    except Exception as e:
+        print(f"Error in api_user_notifications: {e}")
+        return Response({'error': str(e)}, status=500)
+
+
+# --- HELPER: Create Notification (for testing) ---
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+def api_create_notification(request):
+    """Create a notification for a given user.
+
+    Expected JSON body: { "user_id": <int>, "title": "...", "message": "..." }
+    This endpoint is intentionally permissive to allow quick testing from mobile/front-end.
+    """
+    try:
+        data = request.data
+        user_id = data.get('user_id') or data.get('recipient_id')
+        title = data.get('title')
+        message = data.get('message')
+
+        if not user_id or not title or not message:
+            return Response({'error': 'user_id, title and message are required'}, status=400)
+
+        user = get_object_or_404(UserRegistration, pk=user_id)
+
+        notif = Notification.objects.create(recipient=user, title=title, message=message, is_read=False)
+        serializer = NotificationSerializer(notif)
+        return Response(serializer.data, status=201)
+    except Exception as e:
+        print(f"Error in api_create_notification: {e}")
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['DELETE'])
+@authentication_classes([])
+def api_delete_notification(request, pk):
+    """Delete a notification by id."""
+    try:
+        notif = get_object_or_404(Notification, pk=pk)
+        notif.delete()
+        return Response({'message': 'Notification deleted', 'id': pk}, status=200)
+    except Exception as e:
+        print(f"Error deleting notification {pk}: {e}")
+        return Response({'error': str(e)}, status=500)
+
+
+# --- MARK NOTIFICATION READ ---
+@api_view(['POST'])
+@authentication_classes([])
+def api_mark_notification_read(request, pk):
+    try:
+        notif = get_object_or_404(Notification, pk=pk)
+        notif.is_read = True
+        notif.save()
+        return Response({'message': 'Marked as read', 'id': notif.id})
+    except Exception as e:
+        print(f"Error marking notification read: {e}")
+        return Response({'error': str(e)}, status=500)
 
 # --- INTERVIEW LOGIC (API) ---
 

@@ -16,6 +16,9 @@ urlpatterns = [
     path('api/interviews/create/', views.interview_create_no_csrf, name='interview_create'),
 # --- Notifications (NEW) ---
     path('api/notifications/<int:user_id>/', views.api_user_notifications, name='api_user_notifications'),
+    path('api/notifications/create/', views.api_create_notification, name='api_create_notification'),
+    path('api/notifications/<int:pk>/mark_read/', views.api_mark_notification_read, name='api_mark_notification_read'),
+    path('api/notifications/<int:pk>/delete/', views.api_delete_notification, name='api_delete_notification'),
     # Desktop HTML Routes
     path('list/', views.jobs_html, name='jobs_html'),
     path('add/', views.job_create_html, name='job_create_html'),
