@@ -153,10 +153,13 @@ def api_update_application_status(request, pk):
 
 # --- HELPER FUNCTION ---
 def send_notification(user, title, message):
-    try:
-        Notification.objects.create(recipient=user, title=title, message=message)
-    except Exception as e:
-        print(f"Failed to send notification: {e}")
+    # 1. Create the Database Record (This makes it show up in Notification.js)
+    Notification.objects.create(
+        recipient=user,
+        title=title,
+        message=message,
+        read=False
+    )
 
 # --- NOTIFICATION API (GET) ---
 @api_view(['GET'])
