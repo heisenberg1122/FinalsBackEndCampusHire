@@ -11,4 +11,4 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRegistration
         # Fields to send to the frontend
-        fields = ['id', 'first_name', 'last_name', 'email', 'role', 'gender', 'profile_picture', 'bio', 'phone_number', 'address', 'skills']
+        fields = ['id', 'first_name', 'last_name', 'email', 'role', 'gender', 'profile_picture', 'bio', 'resume', 'phone_number', 'address', 'skills']

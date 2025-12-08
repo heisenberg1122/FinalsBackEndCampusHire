@@ -3,6 +3,14 @@ from django.contrib import messages
 from job_recruitmentapp.models import JobPosting, JobApplication
 from registration.models import UserRegistration
 
+# --- NEW IMPORTS FOR API ---
+from rest_framework import viewsets, permissions, parsers
+from .serializer import UserSerializer
+
+# =========================================
+#  WEBSITE VIEWS (HTML) - Keep these!
+# =========================================
+
 def user_dashboard(request):
     user_id = request.session.get('user_id')
     if not user_id:
@@ -16,7 +24,7 @@ def user_dashboard(request):
         jobs = []
         applied_job_ids = []
         user = None
-    
+     
     context = {
         'current_user': request.session.get('user_name', 'Guest'),
         'user_obj': user,
@@ -59,7 +67,6 @@ def user_profile_edit(request):
 
     return render(request, 'user/edit_profile.html', {'user': user})
 
-# --- UPDATED APPLY FUNCTION WITH FORM ---
 def apply_for_job(request, job_id):
     user_id = request.session.get('user_id')
     if not user_id:
@@ -68,24 +75,20 @@ def apply_for_job(request, job_id):
     user = get_object_or_404(UserRegistration, id=user_id)
     job = get_object_or_404(JobPosting, id=job_id)
 
-    # 1. Check if already applied
     if JobApplication.objects.filter(applicant=user, job=job).exists():
         messages.warning(request, "You have already applied for this job.")
         return redirect('userapp:user_dashboard')
 
-    # 2. Process Form Submission
     if request.method == 'POST':
         cover_letter = request.POST.get('cover_letter')
         resume = request.FILES.get('resume')
 
-        # If user didn't upload a new resume, try to use the one from their profile
         if not resume and user.resume:
             resume = user.resume
         elif not resume and not user.resume:
             messages.error(request, "Please upload a resume to apply.")
             return render(request, 'user/application_form.html', {'job': job, 'user': user})
 
-        # Save Application
         JobApplication.objects.create(
             applicant=user, 
             job=job,
@@ -95,5 +98,17 @@ def apply_for_job(request, job_id):
         messages.success(request, f"Application submitted for {job.title}!")
         return redirect('userapp:user_dashboard')
 
-    # 3. Show the Application Form
     return render(request, 'user/application_form.html', {'job': job, 'user': user})
+
+
+# =========================================
+#  API VIEWS (JSON) - React Native connects here!
+# =========================================
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows users to be viewed or edited.
+    """
+    queryset = UserRegistration.objects.all()
+    serializer_class = UserSerializer
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser) # Needed for Image Uploads
