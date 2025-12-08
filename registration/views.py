@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import UserRegistration
 from .serializer import RegistrationSerializer, UserSerializer
+from rest_framework import viewsets
+from django.contrib.auth.models import User
 
 # ===========================
 #  API VIEWS (Mobile App)
@@ -50,7 +52,6 @@ def user_detail(request, pk):
             # Return the public user fields back to the client (use context so ImageField becomes absolute URL)
             return Response(UserSerializer(user, context={'request': request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 # ===========================
 #  HTML VIEWS (Desktop Web)

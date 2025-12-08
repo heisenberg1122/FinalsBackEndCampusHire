@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class UserRegistration(models.Model):
     ROLE_CHOICES = [
         ('Admin', 'Admin'),

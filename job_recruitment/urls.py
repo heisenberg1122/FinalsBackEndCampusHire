@@ -16,7 +16,6 @@ urlpatterns = [
     # APP CONNECTIONS (Note the prefixes!)
     path('reg/', include('registration.urls')), 
     path('job/', include('job_recruitmentapp.urls')),
-    path('user/', include('userapp.urls')),
 ]
 
 if settings.DEBUG:
