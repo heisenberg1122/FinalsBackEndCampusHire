@@ -33,6 +33,9 @@ class InterviewSerializer(serializers.ModelSerializer):
         return "Unknown Applicant"
 
 class NotificationSerializer(serializers.ModelSerializer):
+    # Provide both 'is_read' (model) and 'read' alias for frontend compatibility
+    read = serializers.BooleanField(source='is_read', read_only=True)
+
     class Meta:
         model = Notification
-        fields = ['id', 'title', 'message', 'is_read', 'created_at']
+        fields = ['id', 'title', 'message', 'is_read', 'read', 'created_at']

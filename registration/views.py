@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework import status
 from .models import UserRegistration
@@ -26,7 +27,8 @@ def list_users(request):
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
 
-@api_view(['GET', 'DELETE'])
+@api_view(['GET', 'DELETE', 'PUT', 'PATCH'])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def user_detail(request, pk):
     try:
         user = UserRegistration.objects.get(pk=pk)
@@ -34,11 +36,20 @@ def user_detail(request, pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
-        serializer = UserSerializer(user)
+        serializer = UserSerializer(user, context={'request': request})
         return Response(serializer.data)
     elif request.method == 'DELETE':
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    elif request.method in ['PUT', 'PATCH']:
+        # Allow partial updates from the mobile app, including file uploads
+        # Using DRF parsers ensures request.data contains form fields and files
+        serializer = RegistrationSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            # Return the public user fields back to the client (use context so ImageField becomes absolute URL)
+            return Response(UserSerializer(user, context={'request': request}).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ===========================
