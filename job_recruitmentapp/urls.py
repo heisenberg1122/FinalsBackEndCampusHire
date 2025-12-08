@@ -9,11 +9,13 @@ urlpatterns = [
     path('api/jobs/<int:pk>/', views.api_job_detail), # <--- NEW for Edit/Delete
     path('api/applications/', views.api_applications, name='api_applications'), 
     path('api/apply/', views.api_apply_job, name='api_apply_job'),
+    path('api/applications/<int:pk>/', views.delete_application, name='delete_application'),
     # In urlpatterns:
     path('api/applications/<int:pk>/status/', views.api_update_application_status),
     path('api/interviews/', views.api_interview_list, name='api_interviews'),
     # Use a CSRF-exempt plain Django view for mobile POSTs to avoid DRF/CSRF conflicts
     path('api/interviews/create/', views.interview_create_no_csrf, name='interview_create'),
+    path('api/interviews/<int:pk>/delete/', views.delete_interview, name='delete_interview'),
 # --- Notifications (NEW) ---
     path('api/notifications/<int:user_id>/', views.api_user_notifications, name='api_user_notifications'),
     path('api/notifications/create/', views.api_create_notification, name='api_create_notification'),

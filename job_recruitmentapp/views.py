@@ -304,7 +304,17 @@ def interview_create(request):
         print("Error scheduling interview:", str(e))
         return Response({"error": str(e)}, status=400)
 
-
+# ---- DELETE INTERVIEW VIEW (if needed) ----
+@csrf_exempt
+@api_view(['DELETE'])
+@authentication_classes([])
+def delete_interview(request, pk):
+    try:
+        interview = Interview.objects.get(pk=pk)
+        interview.delete()
+        return Response({'message': 'Interview deleted'}, status=200)
+    except Interview.DoesNotExist:
+        return Response({'error': 'Interview not found'}, status=404)
 # --- 2. PLAIN DJANGO VERSION (The one you asked to add) ---
 # This serves as a robust fallback if DRF serialization fails or middleware interferes.
 @csrf_exempt
@@ -379,23 +389,68 @@ def interview_create_no_csrf(request):
 def api_review_application(request, pk):
     application = get_object_or_404(JobApplication, pk=pk)
     action = request.data.get('action')
-    
+    job = application.job  # Get the job object
+
     if action == 'accept':
+        # --- 1. Check if slots are available ---
+        if job.slots <= 0:
+            return Response({"error": "Cannot accept. This job has 0 slots remaining."}, status=400)
+
+        # --- 2. Deduct the slot ---
+        job.slots -= 1
+
+        # --- 3. Close job if slots hit 0 ---
+        if job.slots == 0:
+            job.status = 'Closed'
+        
+        job.save() # Save the changes to the Job database
+
+        # --- 4. Update Application Status ---
         application.status = 'Accepted'
         application.save()
+
         # 🔥 NOTIFICATION 🔥
         send_notification(application.applicant, "Application Accepted", f"Congratulations! You've been accepted for {application.job.title}.")
-        return Response({"message": "Application Accepted.", "status": "Accepted"})
+        
+        return Response({
+            "message": "Application Accepted and slot deducted.", 
+            "status": "Accepted",
+            "slots_remaining": job.slots
+        })
     
     elif action == 'reject':
         application.status = 'Rejected'
         application.save()
+        
         # 🔥 NOTIFICATION 🔥
         send_notification(application.applicant, "Application Update", f"Update regarding {application.job.title}: We have decided not to proceed.")
+        
         return Response({"message": "Application Rejected.", "status": "Rejected"})
     
     return Response({"error": "Invalid action provided"}, status=400)
-   
+
+
+    # ==========================================
+    # DELETE APPLICATION API
+
+@csrf_exempt    
+@api_view(['DELETE'])
+@authentication_classes([])
+def delete_application(request, pk):
+    try:
+        application = JobApplication.objects.get(pk=pk)
+        
+        # Simply delete the application record
+        # We do NOT update job slots or job status here per your request
+        application.delete()
+        
+        return Response({'message': 'Application deleted successfully'}, status=200)
+
+    except JobApplication.DoesNotExist:
+        return Response({'error': 'Application not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
 # ==========================================
 #  HTML VIEWS (Desktop / Admin Panel)
 # ==========================================
