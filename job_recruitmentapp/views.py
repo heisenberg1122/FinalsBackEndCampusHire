@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from rest_framework.decorators import api_view, authentication_classes
+from rest_framework.decorators import api_view, authentication_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
+
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.response import Response
 from rest_framework import status
@@ -19,6 +20,12 @@ from .models import Notification
 from .serializer import NotificationSerializer
 from django.db import OperationalError
 import datetime
+from django.db import OperationalError
+
+from .models import JobPosting, JobApplication, Interview, Notification
+from registration.models import UserRegistration
+from .serializer import JobPostingSerializer, JobApplicationSerializer, InterviewSerializer, NotificationSerializer
+from registration.serializer import UserSerializer
 
 # ==========================================
 #  API VIEWS (Mobile / React Native)
@@ -97,8 +104,6 @@ def api_applications(request):
     return Response(serializer.data)
 
 # --- 6. APPLY FOR JOB API ---
-# views.py
-
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser]) # 1. Allow File Uploads
 def api_apply_job(request):
@@ -139,7 +144,6 @@ def api_apply_job(request):
     except Exception as e:
         print(f"Error in api_apply_job: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
 
 # --- 7. UPDATE APPLICATION STATUS API ---
 @api_view(['PUT'])
@@ -153,6 +157,7 @@ def api_update_application_status(request, pk):
 
         application.status = new_status
         application.save()
+        
         # Send a user notification for important status changes
         try:
             if new_status == 'Accepted':
@@ -160,25 +165,24 @@ def api_update_application_status(request, pk):
             elif new_status == 'Rejected':
                 send_notification(application.applicant, "Application Update", f"Update regarding {application.job.title}: We have decided not to proceed.")
             elif new_status == 'Scheduled':
-                # Scheduled status may be set when an interview is created elsewhere
                 send_notification(application.applicant, "Interview Scheduled", f"An interview for {application.job.title} has been scheduled. Check your dashboard for details.")
         except Exception as e:
             print(f"Failed to send notification on status change: {e}")
+            
         return Response({"message": f"Application marked as {new_status}"}, status=status.HTTP_200_OK)
 
     except JobApplication.DoesNotExist:
         return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
-    
 
 
-# --- HELPER FUNCTION ---
+# --- HELPER FUNCTION (FIXED) ---
 def send_notification(user, title, message):
-    # 1. Create the Database Record (This makes it show up in Notification.js)
+    # 1. Create the Database Record
     Notification.objects.create(
         recipient=user,
         title=title,
         message=message,
-        read=False
+        is_read=False  # <--- FIXED: Changed from 'read' to 'is_read'
     )
 
 # --- NOTIFICATION API (GET) ---
@@ -189,9 +193,7 @@ def api_user_notifications(request, user_id):
         serializer = NotificationSerializer(notifications, many=True)
         return Response(serializer.data)
     except OperationalError as oe:
-        # Database table for notifications likely doesn't exist yet (migrations not applied).
         print(f"OperationalError when fetching notifications: {oe}")
-        # Return empty list so client receives a 200 with no notifications instead of a 500.
         return Response([], status=200)
     except Exception as e:
         print(f"Error in api_user_notifications: {e}")
@@ -203,11 +205,6 @@ def api_user_notifications(request, user_id):
 @api_view(['POST'])
 @authentication_classes([])
 def api_create_notification(request):
-    """Create a notification for a given user.
-
-    Expected JSON body: { "user_id": <int>, "title": "...", "message": "..." }
-    This endpoint is intentionally permissive to allow quick testing from mobile/front-end.
-    """
     try:
         data = request.data
         user_id = data.get('user_id') or data.get('recipient_id')
@@ -230,7 +227,6 @@ def api_create_notification(request):
 @api_view(['DELETE'])
 @authentication_classes([])
 def api_delete_notification(request, pk):
-    """Delete a notification by id."""
     try:
         notif = get_object_or_404(Notification, pk=pk)
         notif.delete()
@@ -264,11 +260,11 @@ def api_interview_list(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# --- 1. DRF VERSION (Keep this if using DRF) ---
+# --- 1. DRF VERSION (Renamed to avoid conflict) ---
 @csrf_exempt
 @api_view(['POST'])
 @authentication_classes([])
-def interview_create(request):
+def api_interview_create(request): # Renamed from interview_create
     try:
         data = request.data
         app_id = data.get('application_id')
@@ -306,7 +302,7 @@ def interview_create(request):
         print("Error scheduling interview:", str(e))
         return Response({"error": str(e)}, status=400)
 
-# ---- DELETE INTERVIEW VIEW (if needed) ----
+# ---- DELETE INTERVIEW VIEW ----
 @csrf_exempt
 @api_view(['DELETE'])
 @authentication_classes([])
@@ -317,8 +313,8 @@ def delete_interview(request, pk):
         return Response({'message': 'Interview deleted'}, status=200)
     except Interview.DoesNotExist:
         return Response({'error': 'Interview not found'}, status=404)
-# --- 2. PLAIN DJANGO VERSION (The one you asked to add) ---
-# This serves as a robust fallback if DRF serialization fails or middleware interferes.
+
+# --- 2. PLAIN DJANGO VERSION (Fallback) ---
 @csrf_exempt
 def interview_create_no_csrf(request):
     if request.method != 'POST':
@@ -361,7 +357,7 @@ def interview_create_no_csrf(request):
         application.status = 'Interviewing'
         application.save()
 
-        # 🔥 TRIGGER NOTIFICATION (Added here) 🔥
+        # 🔥 TRIGGER NOTIFICATION (Fixed is_read inside helper) 🔥
         send_notification(
             user=application.applicant,
             title="Interview Scheduled",
@@ -384,14 +380,13 @@ def interview_create_no_csrf(request):
 
 
 # --- REVIEW APPLICATION VIEW (API) ---
-
 @csrf_exempt
 @api_view(['POST'])
 @authentication_classes([])
 def api_review_application(request, pk):
     application = get_object_or_404(JobApplication, pk=pk)
     action = request.data.get('action')
-    job = application.job  # Get the job object
+    job = application.job 
 
     if action == 'accept':
         # --- 1. Check if slots are available ---
@@ -405,7 +400,7 @@ def api_review_application(request, pk):
         if job.slots == 0:
             job.status = 'Closed'
         
-        job.save() # Save the changes to the Job database
+        job.save()
 
         # --- 4. Update Application Status ---
         application.status = 'Accepted'
@@ -432,20 +427,15 @@ def api_review_application(request, pk):
     return Response({"error": "Invalid action provided"}, status=400)
 
 
-    # ==========================================
-    # DELETE APPLICATION API
-
+# ==========================================
+#  DELETE APPLICATION API
 @csrf_exempt    
 @api_view(['DELETE'])
 @authentication_classes([])
 def delete_application(request, pk):
     try:
         application = JobApplication.objects.get(pk=pk)
-        
-        # Simply delete the application record
-        # We do NOT update job slots or job status here per your request
         application.delete()
-        
         return Response({'message': 'Application deleted successfully'}, status=200)
 
     except JobApplication.DoesNotExist:
@@ -505,11 +495,8 @@ def application_list(request):
     return render(request, 'dashboard/applications.html')
 
 def pending_tasks(request):
-    # Ensure admin / HR is logged in (uses same session system as other HTML views)
     if not request.session.get('user_id'):
         return redirect('registration:login_view')
-
-    # Provide list of pending job applications to the template
     tasks = JobApplication.objects.filter(status='Pending').order_by('-applied_at')
     return render(request, 'dashboard/tasks.html', {'tasks': tasks})
 
@@ -517,10 +504,10 @@ def system_settings(request):
     return render(request, 'dashboard/settings.html')
 
 def interview_list(request):
-    # Render HTML list of interviews for admin panel
     interviews = Interview.objects.select_related('application__applicant', 'application__job').all().order_by('date_time')
     return render(request, 'interviews/list.html', {'interviews': interviews})
 
+# Note: This is your HTML view logic for interview creation (likely used by web forms)
 def interview_create(request, application_id):
     return redirect('jobs:interview_list')
 
