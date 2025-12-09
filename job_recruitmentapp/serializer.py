@@ -11,11 +11,17 @@ class JobPostingSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class JobApplicationSerializer(serializers.ModelSerializer):
-    applicant = UserSerializer(read_only=True)
-    job = JobPostingSerializer(read_only=True)
     class Meta:
         model = JobApplication
         fields = '__all__'
+
+    # This magic method handles the "Get" request
+    # It converts the simple IDs back into full objects for your App to display
+    def to_representation(self, instance):
+        response = super().to_representation(instance)
+        response['applicant'] = UserSerializer(instance.applicant).data
+        response['job'] = JobPostingSerializer(instance.job).data
+        return response
 
 class InterviewSerializer(serializers.ModelSerializer):
     applicant_name = serializers.SerializerMethodField()

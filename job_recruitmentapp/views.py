@@ -1,11 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from rest_framework.decorators import api_view, authentication_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import json
+
 
 from .models import JobPosting, JobApplication
 from registration.models import UserRegistration
@@ -98,29 +100,35 @@ def api_applications(request):
 # views.py
 
 @api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser]) # 1. Allow File Uploads
 def api_apply_job(request):
     try:
         job_id = request.data.get('job_id')
         user_id = request.data.get('user_id')
+        
+        # 2. Get the new fields
+        cover_letter = request.data.get('cover_letter')
+        resume = request.data.get('resume') 
 
-        # 1. Validate Data Exists
+        # Validate Data Exists
         if not job_id or not user_id:
             return Response({"error": "Missing Job ID or User ID"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Get Instances
+        # Get Instances
         job = JobPosting.objects.get(pk=job_id)
         user = UserRegistration.objects.get(pk=user_id)
 
-        # 3. Check for Duplicate
+        # Check for Duplicate
         if JobApplication.objects.filter(job=job, applicant=user).exists():
-            # This is the 400 error you were seeing (which is good!)
             return Response({"error": "You have already applied for this job"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Create Application
+        # 3. Create Application with Resume and Cover Letter
         JobApplication.objects.create(
             job=job,
             applicant=user,
-            status='Pending'
+            status='Pending',
+            cover_letter=cover_letter, # <--- Added
+            resume=resume              # <--- Added
         )
         return Response({"message": "Application submitted successfully"}, status=status.HTTP_201_CREATED)
 
@@ -129,7 +137,7 @@ def api_apply_job(request):
     except UserRegistration.DoesNotExist:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        print(f"Error in api_apply_job: {str(e)}") # Print error to terminal for debugging
+        print(f"Error in api_apply_job: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
 
