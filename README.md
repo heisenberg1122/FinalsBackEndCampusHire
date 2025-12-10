@@ -1,23 +1,23 @@
 # Campus Hire Backend (FinalsBackEndCampusHire)
 
-This is the backend repository for the Campus Hire recruitment platform. It provides the server-side logic, database management, and APIs required to handle user authentication, job postings, and the recruitment process.
+This is the backend repository for the **Campus Hire** recruitment platform. It provides the server-side logic, database management, and APIs required to handle user authentication, job postings, and the recruitment process.
 
 Built with **Python** and **Django**.
 
-Features
+## 🚀 Features
 
 - **User Management**: Handles user registration, authentication, and profiles (via `userapp` and `registration`).
 - **Recruitment Logic**: Manages job listings, applications, and recruitment workflows (via `job_recruitmentapp`).
 - **Media Management**: Support for uploading and serving media files (resumes, profile pictures).
 - **Admin Interface**: Built-in Django admin for managing database records.
 
-Tech Stack
+## 🛠️ Tech Stack
 
 - **Framework**: Django (Python)
 - **Database**: SQLite (default for development)
 - **Dependencies**: Managed via `requirements.txt`
 
-Project Structure
+## 📂 Project Structure
 
 - `job_recruitment/` - Main project configuration (settings, URLs, WSGI).
 - `job_recruitmentapp/` - Core application containing logic for job posts and hiring.
@@ -80,6 +80,7 @@ Run the Development Server
 Bash
 
 python manage.py runserver
+The server will start at http://127.0.0.1:8000/.
 
 🔗 API Endpoints
 Documentation of key endpoints available in the application (Example):
