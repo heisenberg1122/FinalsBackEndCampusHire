@@ -90,9 +90,9 @@ Admin Panel: /admin/
 Home/Index: / (Check job_recruitment/urls.py for all defined routes)
 
 🤝 Contributors
-github.com/heisenberg1122
-github.com/brad-git03
-github.com/NicoleAndreaBolus
+- github.com/heisenberg1122
+- github.com/brad-git03
+- github.com/NicoleAndreaBolus
 
 License
 This project is for academic/final project purposes.
