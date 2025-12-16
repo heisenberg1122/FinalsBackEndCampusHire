@@ -174,6 +174,16 @@ def api_update_application_status(request, pk):
     except JobApplication.DoesNotExist:
         return Response({"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
 
+# --- 8. APPLICATION HISTORY API (NEW) ---
+@api_view(['GET'])
+def application_history(request, user_id):
+    try:
+        # Filter by applicant_id (which is the foreign key to UserRegistration)
+        apps = JobApplication.objects.filter(applicant_id=user_id)
+        serializer = JobApplicationSerializer(apps, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # --- HELPER FUNCTION (FIXED) ---
 def send_notification(user, title, message):

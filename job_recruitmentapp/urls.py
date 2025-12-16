@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/jobs/<int:pk>/', views.api_job_detail), # <--- NEW for Edit/Delete
     path('api/applications/', views.api_applications, name='api_applications'), 
     path('api/apply/', views.api_apply_job, name='api_apply_job'),
+    path('api/application_history/<int:user_id>/', views.application_history, name='application_history'),
     path('api/applications/<int:pk>/', views.delete_application, name='delete_application'),
     # In urlpatterns:
     path('api/applications/<int:pk>/status/', views.api_update_application_status),
